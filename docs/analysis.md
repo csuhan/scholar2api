@@ -106,3 +106,36 @@ VLM 走 OpenAI 兼容协议（实测 2026-10-25）：
 - 作者搜索（`search_authors`）需登录，未实现（可用 Semantic Scholar/OpenAlex API 替代）
 - 被引列表（`/scholar?cites=`）防护最强，仅走浏览器通道
 - Google 不定期调整 class 名；`tests/` 内有 fixture 测试，失效时按 §2 重新标定
+
+## 5. 容量边界（实测 2026-10-26，家庭/办公 IP，冷会话）
+
+### 5.1 Google Scholar 反爬阈值
+
+| 场景 | 强度 | 结果 |
+|---|---|---|
+| `/citations` 冷会话 | 0.5 rps × 15 | 全部 200 |
+| `/citations` | 2 rps × 20 | 全部 200 |
+| `/citations` | 5 rps × 20 | 全部 200 |
+| `/citations` | 10 并发突发 | 全部 200（1.2~1.8s） |
+| `/scholar?cites=` | 1 rps × 5 | 全部 200 |
+| `/scholar?cites=` | 20 并发（≈10.6 rps） | 全部 200 |
+| **`/citations` 持续 10 rps** | **246 次 / 115 秒** | **触发封锁**（302 → `/sorry/index`，客户端见 429） |
+
+封锁特征：
+- **IP 级**：`scholar.google.com` 与 `scholar.google.com.hk` 同时封；普通 Google 搜索
+  不受影响；换 UA 无效；带持久 profile 的真实 Chrome 也无法通过
+- 封锁页 = `google.com/sorry/index`（reCAPTCHA），不是页内 `#gs_captcha_f`
+- **恢复时间 ≥ 20 分钟**（实测 20 分钟仍封锁；Google 硬封锁通常 30 分钟~数小时）
+
+### 5.2 API 自身吞吐
+
+| 指标 | 数值 |
+|---|---|
+| 缓存命中吞吐（并发 20） | **600~800 RPS**，p50 24ms，p95 <100ms（单 uvicorn worker） |
+| 高并发（50/100） | 吞吐反降至 160~210 RPS（单 worker 饱和 + access log） |
+| 未缓存单请求 | 0.4~1.8s（受 1~3s pacing 约束，约 0.5 req/s/实例） |
+| 封锁期间首个未缓存请求 | ~24s（HTTP→429→浏览器→验证码失败） |
+| 封锁期间后续请求（熔断） | **~10ms 返回 503** |
+
+结论：**缓存层可承载上千 QPS 级别的读，未缓存的抓取能力约 0.5~5 req/s/IP**。
+要扩大抓取吞吐只能加代理 IP 池；单 IP 10 rps 持续约 2 分钟即封。
