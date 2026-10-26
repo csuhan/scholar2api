@@ -1,0 +1,21 @@
+# secrets
+.env
+
+# python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+
+# tests & tooling
+.pytest_cache/
+.ruff_cache/
+
+# os
+.DS_Store
+
+# browser profile
+browser-profile/

@@ -1,0 +1,45 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "scholar2api"
+version = "0.1.0"
+description = "Google Scholar profile data as a JSON API"
+readme = "README.md"
+license = { text = "MIT" }
+authors = [{ name = "Jiaming Han" }]
+requires-python = ">=3.9"
+keywords = ["google-scholar", "api", "fastapi", "citations", "scraper"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Framework :: FastAPI",
+]
+dependencies = [
+    "httpx>=0.27",
+    "pydantic>=2",
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.29",
+    "playwright>=1.44",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "ruff>=0.6"]
+
+[project.urls]
+Homepage = "https://github.com/your-name/scholar2api"
+
+[tool.setuptools.packages.find]
+include = ["scholar2api*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I"]
+ignore = ["E501"]
