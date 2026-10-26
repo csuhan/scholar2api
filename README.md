@@ -13,7 +13,8 @@ GET /author/vgcxKEcAAAAJ  ->  { name, stats, papers, ... }
 ## 特性
 
 - **零第三方解析库**：纯正则解析，15 个离线测试基于真实页面快照
-- **三层抓取**：TTL 缓存 → httpx（快）→ Playwright + VLM 打码（仅在封锁时）
+- **持久化缓存**：SQLite + 24h TTL，重启/多进程共享，过期自动重新抓取
+- **三层抓取**：缓存 → httpx（快）→ Playwright + VLM 打码（仅在封锁时）
 - **反爬就绪**：真实 Chrome、持久化 profile、代理、请求节奏控制
 - **API 语义完整**：400 / 404 / 502 / 503 均正确映射
 
@@ -32,6 +33,7 @@ uvicorn scholar2api.service:app --port 8000
 | 方法 | 路径 | 说明 |
 |---|---|---|
 | GET | `/healthz` | 健康检查 |
+| GET | `/cache/stats` | 缓存条目数、TTL、DB 路径 |
 | GET | `/author/{id}` | 学者主页（`id` 可为纯 ID 或 URL） |
 | GET | `/author?url=...` | 同上，URL 用查询参数传入（避免路径编码问题） |
 | GET | `/author/{id}/papers` | 论文列表；`cstart` `pagesize` `sortby=cited\|pubdate` `all_pages` |
@@ -42,7 +44,14 @@ curl 'http://localhost:8000/author/vgcxKEcAAAAJ' | jq
 curl 'http://localhost:8000/author?url=https://scholar.google.com/citations?user=vgcxKEcAAAAJ'
 curl 'http://localhost:8000/author/vgcxKEcAAAAJ/papers?sortby=pubdate&pagesize=20'
 curl 'http://localhost:8000/author/vgcxKEcAAAAJ/paper/u5HHmVD_uO8C' | jq
+
+# 强制刷新（跳过缓存，抓取后写回）
+curl 'http://localhost:8000/author/vgcxKEcAAAAJ?refresh=true'
+# 查看缓存状态
+curl 'http://localhost:8000/cache/stats'
 ```
+
+所有 GET 端点都支持 `?refresh=true` 跳过缓存读取。
 
 响应节选：
 
@@ -72,7 +81,8 @@ curl 'http://localhost:8000/author/vgcxKEcAAAAJ/paper/u5HHmVD_uO8C' | jq
 
 | 变量 | 默认 | 说明 |
 |---|---|---|
-| `SCHOLAR2API_CACHE_TTL` | `3600` | 缓存秒数，**最有效的防封手段** |
+| `SCHOLAR2API_CACHE_TTL` | `86400` | 缓存秒数（默认 24h），**最有效的防封手段** |
+| `SCHOLAR2API_DB_PATH` | `./scholar2api.db` | SQLite 缓存文件路径 |
 | `SCHOLAR2API_PROXY` | – | 代理，如 `http://user:pass@host:port` |
 | `SCHOLAR2API_VLM_PROVIDER` | `openrouter` | `openrouter` / `huggingface` |
 | `OPENROUTER_API_KEY` | – | 打码用；不配也能跑主链路 |
@@ -82,6 +92,20 @@ curl 'http://localhost:8000/author/vgcxKEcAAAAJ/paper/u5HHmVD_uO8C' | jq
 | `SCHOLAR2API_USER_DATA_DIR` | – | 浏览器 profile 目录，累积信任分 |
 | `SCHOLAR2API_BROWSER_TIMEOUT` | `300` | 单次浏览器抓取总超时（秒） |
 | `SCHOLAR2API_BLOCK_COOLDOWN` | `120` | 硬封锁后快速失败的冷却秒数 |
+
+### 缓存行为
+
+```
+请求 → SQLite 命中且未过期？ → 直接返回（约 1~5ms）
+                    ↓ 未命中/过期/refresh=true
+              抓取 Google → 解析 → 写回 SQLite（含时间戳）
+```
+
+- 默认 **24 小时**后过期并重新抓取，可用 `SCHOLAR2API_CACHE_TTL` 调整
+- 数据持久化在 `scholar2api.db`，**重启服务、多 worker 部署都共享**
+- 页面以 zlib 压缩存储（单学者约 25KB）
+- 想立即更新某个学者：加 `?refresh=true`
+- 刷新失败（如被封/网络错误）**不会删除旧缓存**，未过期的数据继续可用
 
 ## 反爬设计
 

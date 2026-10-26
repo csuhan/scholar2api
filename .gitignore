@@ -19,3 +19,8 @@ venv/
 
 # browser profile
 browser-profile/
+
+# local cache database
+*.db
+*.db-wal
+*.db-shm

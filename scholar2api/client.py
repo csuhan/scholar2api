@@ -15,6 +15,7 @@ from .fetchers.base import BaseFetcher, ScholarBlocked
 from .fetchers.http import HttpFetcher
 from .models import AuthorProfile, Paper, PaperDetail
 from .parsers import extract_user_id, parse_paper_detail, parse_paper_list, parse_profile
+from .store import SqliteCache
 
 BASE = "https://scholar.google.com"
 
@@ -22,33 +23,38 @@ BASE = "https://scholar.google.com"
 class ScholarClient:
     def __init__(self, fetcher: Optional[BaseFetcher] = None,
                  browser_fetcher: Optional[BaseFetcher] = None,
-                 cache_ttl: float = 3600.0):
+                 cache_ttl: Optional[float] = None,
+                 db_path: Optional[str] = None):
         self.http = fetcher or HttpFetcher(proxy=os.getenv("SCHOLAR2API_PROXY"))
         self._browser = browser_fetcher
-        self.cache_ttl = cache_ttl
-        self._cache = {}
-        self._cache_lock = threading.Lock()
+        self.cache_ttl = (cache_ttl if cache_ttl is not None
+                          else float(os.getenv("SCHOLAR2API_CACHE_TTL", "86400")))
+        self.cache = SqliteCache(
+            db_path or os.getenv("SCHOLAR2API_DB_PATH", "scholar2api.db"),
+            self.cache_ttl)
         self._browser_lock = threading.Lock()
         # after a hard IP block, fail fast instead of retrying the browser
         self.block_cooldown = float(os.getenv("SCHOLAR2API_BLOCK_COOLDOWN", "120"))
         self._blocked_until = 0.0
 
     # --------------------------------------------------------------- api ---
-    def profile(self, id_or_url: str, pagesize: int = 100) -> AuthorProfile:
+    def profile(self, id_or_url: str, pagesize: int = 100,
+                refresh: bool = False) -> AuthorProfile:
         uid = extract_user_id(id_or_url)
         html = self._get(f"{BASE}/citations", {
             "user": uid, "hl": "en", "cstart": 0,
-            "pagesize": min(pagesize, 100)})
+            "pagesize": min(pagesize, 100)}, refresh)
         return parse_profile(html, uid)
 
     def papers(self, id_or_url: str, cstart: int = 0, pagesize: int = 100,
-               sortby: str = "cited") -> Tuple[List[Paper], int]:
+               sortby: str = "cited",
+               refresh: bool = False) -> Tuple[List[Paper], int]:
         uid = extract_user_id(id_or_url)
         params = {"view_op": "list_works", "hl": "en", "user": uid,
                   "cstart": cstart, "pagesize": min(pagesize, 100)}
         if sortby == "pubdate":
             params["sortby"] = "pubdate"
-        batch = parse_paper_list(self._get(f"{BASE}/citations", params))
+        batch = parse_paper_list(self._get(f"{BASE}/citations", params, refresh))
         return batch, cstart + len(batch)  # cursor by actual count
 
     def all_papers(self, id_or_url: str, sortby: str = "cited",
@@ -62,26 +68,27 @@ class ScholarClient:
             page += 1
         return papers
 
-    def paper_detail(self, id_or_url: str, cluster: str) -> PaperDetail:
+    def paper_detail(self, id_or_url: str, cluster: str,
+                     refresh: bool = False) -> PaperDetail:
         uid = extract_user_id(id_or_url)
         cfv = cluster if ":" in cluster else f"{uid}:{cluster}"
         html = self._get(f"{BASE}/citations", {
             "view_op": "view_citation", "hl": "en", "user": uid,
-            "citation_for_view": cfv})
+            "citation_for_view": cfv}, refresh)
         return parse_paper_detail(html, cfv)
 
     def close(self) -> None:
         self.http.close()
+        self.cache.close()
         if self._browser:
             self._browser.close()
 
     # ------------------------------------------------------------ private ---
-    def _get(self, url: str, params: Optional[dict] = None) -> str:
-        key = (url, tuple(sorted((params or {}).items())))
-        with self._cache_lock:
-            cached = self._cache.get(key)
-        if cached and time.time() - cached[0] < self.cache_ttl:
-            return cached[1]
+    def _get(self, url: str, params: Optional[dict] = None,
+             refresh: bool = False) -> str:
+        key = url + "|" + "&".join(f"{k}={v}" for k, v in sorted((params or {}).items()))
+        if not refresh and (cached := self.cache.get(key)):
+            return cached
 
         if time.time() < self._blocked_until:
             raise ScholarBlocked("cooldown")
@@ -101,8 +108,7 @@ class ScholarClient:
             if result.cookies and isinstance(self.http, HttpFetcher):
                 self.http.set_cookies(result.cookies)
 
-        with self._cache_lock:
-            self._cache[key] = (time.time(), result.html)
+        self.cache.set(key, result.html)
         return result.html
 
     def _browser_fetcher(self) -> BaseFetcher:

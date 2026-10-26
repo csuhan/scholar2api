@@ -16,7 +16,7 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger(__name__)
 
-client = ScholarClient(cache_ttl=float(os.getenv("SCHOLAR2API_CACHE_TTL", "3600")))
+client = ScholarClient()  # TTL / DB path come from env (see .env.example)
 
 
 @asynccontextmanager
@@ -49,18 +49,25 @@ def healthz():
     return {"ok": True}
 
 
+@app.get("/cache/stats")
+def cache_stats():
+    return client.cache.stats()
+
+
 @app.get("/author", response_model=AuthorProfile)
 def author_by_url(url: str = Query(..., description="Full Scholar profile URL"),
-                  pagesize: int = Query(100, ge=1, le=100)):
+                  pagesize: int = Query(100, ge=1, le=100),
+                  refresh: bool = False):
     """Resolve an author from a full URL (avoids encoding issues in path)."""
-    return author(url, pagesize)
+    return author(url, pagesize, refresh)
 
 
 @app.get("/author/{user_id}", response_model=AuthorProfile)
-def author(user_id: str, pagesize: int = Query(100, ge=1, le=100)):
+def author(user_id: str, pagesize: int = Query(100, ge=1, le=100),
+           refresh: bool = False):
     """user_id is a bare Scholar id (vgcxKEcAAAAJ) or a URL."""
     try:
-        return client.profile(user_id, pagesize)
+        return client.profile(user_id, pagesize, refresh)
     except Exception as error:  # mapped to an HTTP status
         raise _http_error(error)
 
@@ -69,18 +76,18 @@ def author(user_id: str, pagesize: int = Query(100, ge=1, le=100)):
 def papers(user_id: str, cstart: int = Query(0, ge=0),
            pagesize: int = Query(100, ge=1, le=100),
            sortby: str = Query("cited", pattern="^(cited|pubdate)$"),
-           all_pages: bool = False):
+           all_pages: bool = False, refresh: bool = False):
     try:
         if all_pages:
             return client.all_papers(user_id, sortby)
-        return client.papers(user_id, cstart, pagesize, sortby)[0]
+        return client.papers(user_id, cstart, pagesize, sortby, refresh)[0]
     except Exception as error:
         raise _http_error(error)
 
 
 @app.get("/author/{user_id}/paper/{cluster}", response_model=PaperDetail)
-def paper_detail(user_id: str, cluster: str):
+def paper_detail(user_id: str, cluster: str, refresh: bool = False):
     try:
-        return client.paper_detail(user_id, cluster)
+        return client.paper_detail(user_id, cluster, refresh)
     except Exception as error:
         raise _http_error(error)

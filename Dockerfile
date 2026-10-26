@@ -4,7 +4,8 @@ WORKDIR /app
 COPY pyproject.toml README.md ./
 COPY scholar2api ./scholar2api
 RUN pip install --no-cache-dir .
-ENV SCHOLAR2API_USER_DATA_DIR=/data/browser-profile
+ENV SCHOLAR2API_USER_DATA_DIR=/data/browser-profile \
+    SCHOLAR2API_DB_PATH=/data/scholar2api.db
 VOLUME /data
 EXPOSE 8000
 CMD ["uvicorn", "scholar2api.service:app", "--host", "0.0.0.0", "--port", "8000"]
