@@ -81,6 +81,7 @@ curl 'http://localhost:8000/author/vgcxKEcAAAAJ/paper/u5HHmVD_uO8C' | jq
 | `SCHOLAR2API_CHANNEL` | – | `chrome` 使用真实 Chrome，显著降低被封率 |
 | `SCHOLAR2API_USER_DATA_DIR` | – | 浏览器 profile 目录，累积信任分 |
 | `SCHOLAR2API_BROWSER_TIMEOUT` | `300` | 单次浏览器抓取总超时（秒） |
+| `SCHOLAR2API_BLOCK_COOLDOWN` | `120` | 硬封锁后快速失败的冷却秒数 |
 
 ## 反爬设计
 

@@ -29,6 +29,9 @@ class ScholarClient:
         self._cache = {}
         self._cache_lock = threading.Lock()
         self._browser_lock = threading.Lock()
+        # after a hard IP block, fail fast instead of retrying the browser
+        self.block_cooldown = float(os.getenv("SCHOLAR2API_BLOCK_COOLDOWN", "120"))
+        self._blocked_until = 0.0
 
     # --------------------------------------------------------------- api ---
     def profile(self, id_or_url: str, pagesize: int = 100) -> AuthorProfile:
@@ -80,13 +83,21 @@ class ScholarClient:
         if cached and time.time() - cached[0] < self.cache_ttl:
             return cached[1]
 
+        if time.time() < self._blocked_until:
+            raise ScholarBlocked("cooldown")
+
         try:
             try:
                 result = self.http.fetch(url, params)
             except httpx.TransportError:
                 result = self.http.fetch(url, params)  # one retry
         except ScholarBlocked:
-            result = self._browser_fetcher().fetch(url, params)
+            try:
+                result = self._browser_fetcher().fetch(url, params)
+            except ScholarBlocked:
+                # IP-level block: further requests would just burn 25s each
+                self._blocked_until = time.time() + self.block_cooldown
+                raise
             if result.cookies and isinstance(self.http, HttpFetcher):
                 self.http.set_cookies(result.cookies)
 

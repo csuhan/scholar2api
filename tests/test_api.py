@@ -89,3 +89,15 @@ def test_blocked_is_503():
                                    browser_fetcher=FakeFetcher(block="captcha_failed"))
     with TestClient(service.app) as c:
         assert c.get(f"/author/{UID}").status_code == 503
+
+
+def test_block_cooldown_fails_fast():
+    http = FakeFetcher(block="sorry")
+    browser = FakeFetcher(block="sorry_unsolved")
+    client = ScholarClient(fetcher=http, browser_fetcher=browser, cache_ttl=0)
+    with pytest.raises(ScholarBlocked):
+        client.profile(UID)
+    with pytest.raises(ScholarBlocked) as err:
+        client.profile(UID)
+    assert err.value.kind == "cooldown"
+    assert (http.calls, browser.calls) == (1, 1)  # no extra upstream work
