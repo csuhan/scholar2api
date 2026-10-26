@@ -61,9 +61,12 @@ class BrowserFetcher(BaseFetcher):
     def close(self) -> None:
         with self._lock:
             if self._pw:
+                shutdown = self._shutdown()
                 try:
-                    self._event_loop().run_until_complete(self._shutdown())
-                except Exception:  # engine already gone
+                    self._event_loop().run_until_complete(shutdown)
+                except Exception:  # engine/loop already gone
+                    shutdown.close()
+                finally:
                     self._pw = self._browser = self._ctx = None
             if self._loop and not self._loop.is_closed():
                 self._loop.close()
