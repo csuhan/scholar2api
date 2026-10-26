@@ -125,7 +125,7 @@ VLM 走 OpenAI 兼容协议（实测 2026-10-25）：
 - **IP 级**：`scholar.google.com` 与 `scholar.google.com.hk` 同时封；普通 Google 搜索
   不受影响；换 UA 无效；带持久 profile 的真实 Chrome 也无法通过
 - 封锁页 = `google.com/sorry/index`（reCAPTCHA），不是页内 `#gs_captcha_f`
-- **恢复时间 ≥ 20 分钟**（实测 20 分钟仍封锁；Google 硬封锁通常 30 分钟~数小时）
+- **恢复时间 ≥ 35 分钟**（20 分钟与 35 分钟两次探测均未恢复；Google 硬封锁通常 30 分钟~数小时）
 
 ### 5.2 API 自身吞吐
 
