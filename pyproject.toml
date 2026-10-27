@@ -28,7 +28,8 @@ dependencies = [
 dev = ["pytest>=8", "ruff>=0.6"]
 
 [project.urls]
-Homepage = "https://github.com/your-name/scholar2api"
+Homepage = "https://github.com/csuhan/scholar2api"
+Issues = "https://github.com/csuhan/scholar2api/issues"
 
 [tool.setuptools.packages.find]
 include = ["scholar2api*"]

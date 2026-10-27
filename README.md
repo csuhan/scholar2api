@@ -1,5 +1,8 @@
 # scholar2api
 
+[![CI](https://github.com/csuhan/scholar2api/actions/workflows/ci.yml/badge.svg)](https://github.com/csuhan/scholar2api/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 给定 Google Scholar 学者 ID 或主页 URL，返回结构化 JSON：引用数、h-index、
 i10-index、逐年引用、研究兴趣、合作者、论文列表与单篇详情。
 
@@ -12,7 +15,7 @@ GET /author/vgcxKEcAAAAJ  ->  { name, stats, papers, ... }
 
 ## 特性
 
-- **零第三方解析库**：纯正则解析，15 个离线测试基于真实页面快照
+- **零第三方解析库**：纯正则解析，离线测试基于真实页面快照
 - **持久化缓存**：SQLite + 24h TTL，重启/多进程共享，过期自动重新抓取
 - **三层抓取**：缓存 → httpx（快）→ Playwright + VLM 打码（仅在封锁时）
 - **反爬就绪**：真实 Chrome、持久化 profile、代理、请求节奏控制
@@ -21,6 +24,8 @@ GET /author/vgcxKEcAAAAJ  ->  { name, stats, papers, ... }
 ## 快速开始
 
 ```bash
+git clone https://github.com/csuhan/scholar2api.git
+cd scholar2api
 pip install -e .
 python -m playwright install chromium   # 只为反爬兜底，主链路不需要
 uvicorn scholar2api.service:app --port 8000
